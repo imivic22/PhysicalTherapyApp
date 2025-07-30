@@ -1,45 +1,32 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
-import { checkProfileCompletion } from '../../../lib/profileUtils';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 export default function AuthCallback() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { error } = await supabase.auth.getSession();
         
         if (error) {
           setStatus('error');
           setMessage('Authentication failed. Please try again.');
-        } else if (session?.user) {
-          setStatus('success');
-          setMessage('Email verified successfully! Checking profile...');
-          
-          // Check if profile is complete
-          const { isComplete } = await checkProfileCompletion(session.user.id);
-          
-          if (isComplete) {
-            setMessage('Email verified successfully! Redirecting to dashboard...');
-            setTimeout(() => {
-              router.push('/dashboard');
-            }, 2000);
-          } else {
-            setMessage('Email verified successfully! Redirecting to complete your profile...');
-            setTimeout(() => {
-              router.push('/profile/complete');
-            }, 2000);
-          }
         } else {
-          setStatus('error');
-          setMessage('No session found. Please try logging in again.');
+          setStatus('success');
+          setMessage('Email verified successfully! Redirecting to dashboard...');
+          
+          // Redirect to dashboard after a short delay
+          setTimeout(() => {
+            router.push('/dashboard');
+          }, 2000);
         }
       } catch (error) {
         setStatus('error');

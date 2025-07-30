@@ -9,7 +9,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signUp: (email: string, password: string, userData: any) => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string, userData?: any) => Promise<{ error: any; user?: User }>;
   signOut: () => Promise<void>;
 }
 
@@ -67,21 +67,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: userData,
+          data: {
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            user_type: userData.user_type
+          },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
-      return { error };
+      if (error) {
+        return { error };
+      }
+      // Do not insert profile here; wait until user is authenticated
+      return { error: null };
     } catch (error) {
       return { error: { message: 'An unexpected error occurred during signup' } };
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, userData?: any) => {
     // Check if Supabase is configured
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -95,11 +103,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      return { error };
+      if (error) {
+        return { error };
+      }
+      
+      // Check if email is confirmed
+      if (data.user && !data.user.email_confirmed_at) {
+        return { 
+          error: { 
+            message: 'Please check your email and click the verification link before logging in.' 
+          } 
+        };
+      }
+      
+      // If userData is provided (from signup flow), create the basic profile
+      if (data && data.user && userData) {
+        // Check if profile already exists
+        const { data: existingProfile, error: selectError } = await supabase
+          .from('medical_app_profiles')
+          .select('id')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (!existingProfile && !selectError) {
+          const { error: profileError } = await supabase.from('medical_app_profiles').insert([
+            {
+              id: data.user.id,
+              email: data.user.email,
+              first_name: userData.first_name,
+              last_name: userData.last_name,
+              user_type: userData.user_type,
+            },
+          ]);
+          if (profileError) {
+            return { error: profileError };
+          }
+        }
+      }
+      
+      return { error: null, user: data.user };
     } catch (error) {
       return { error: { message: 'An unexpected error occurred during signin' } };
     }

@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { Navbar } from '../components/Navbar';
 import { Dashboard } from '../components/Dashboard';
 import { Footer } from '../components/Footer';
 
@@ -34,7 +33,6 @@ export default function DashboardPage() {
   if (user) {
     return (
       <div className="flex flex-col min-h-screen bg-gray-50">
-        <Navbar />
         <main className="flex-grow">
           <Dashboard />
         </main>

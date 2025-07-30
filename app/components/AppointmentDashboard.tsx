@@ -1,43 +1,39 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Clock3, CheckCircle, Calendar, User, XCircle, Eye } from 'lucide-react';
+import { Calendar, Clock, User, MapPin, Phone, Mail, Edit, Trash2, CheckCircle, XCircle, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Appointment {
   id: string;
   appointment_date: string;
   appointment_type: string;
-  consultation_type: string;
   status: string;
   notes: string;
-  patient?: {
-    first_name: string;
-    last_name: string;
-    email: string;
-  };
   provider?: {
     first_name: string;
     last_name: string;
     specialization: string;
   };
+  patient?: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  };
 }
 
-interface AppointmentListProps {
-  userType?: 'provider' | 'patient';
-}
-
-export function AppointmentList({ userType }: AppointmentListProps) {
+export function AppointmentDashboard() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [userType, setUserType] = useState<string>('');
 
   useEffect(() => {
-    fetchAppointments();
-  }, [userType]);
+    fetchUserTypeAndAppointments();
+  }, []);
 
-  const fetchAppointments = async () => {
+  const fetchUserTypeAndAppointments = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -45,35 +41,27 @@ export function AppointmentList({ userType }: AppointmentListProps) {
         return;
       }
 
-      // If userType is not provided, determine it from the user's profile
-      let currentUserType = userType;
-      if (!currentUserType) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('medical_app_profiles')
-          .select('user_type')
-          .eq('id', user.id)
-          .single();
+      // First get user type
+      const { data: profileData, error: profileError } = await supabase
+        .from('medical_app_profiles')
+        .select('user_type')
+        .eq('id', user.id)
+        .single();
 
-        if (profileError) {
-          console.error('Error fetching user type:', profileError);
-          setError('Failed to load user information');
-          return;
-        }
+      if (profileError) throw profileError;
 
-        currentUserType = profileData.user_type;
-      }
+      setUserType(profileData.user_type);
 
-      console.log('Fetching appointments for user:', user.id, 'Type:', currentUserType);
-
-      if (currentUserType === 'provider') {
+      // Then fetch appointments based on user type
+      if (profileData.user_type === 'provider') {
         await fetchProviderAppointments(user.id);
       } else {
         await fetchPatientAppointments(user.id);
       }
 
     } catch (error) {
-      console.error('Error fetching appointments:', error);
-      setError('Failed to load appointments');
+      console.error('Error fetching user type:', error);
+      setError('Failed to load user information');
     } finally {
       setLoading(false);
     }
@@ -81,6 +69,8 @@ export function AppointmentList({ userType }: AppointmentListProps) {
 
   const fetchProviderAppointments = async (userId: string) => {
     try {
+      console.log('Fetching provider appointments for user:', userId);
+
       // Get appointments for this provider
       const { data, error } = await supabase
         .from('medical_app_appointments')
@@ -111,7 +101,6 @@ export function AppointmentList({ userType }: AppointmentListProps) {
             id: apt.id,
             appointment_date: apt.appointment_date,
             appointment_type: apt.appointment_type,
-            consultation_type: apt.consultation_type,
             status: apt.status,
             notes: apt.notes,
             patient: {
@@ -132,6 +121,8 @@ export function AppointmentList({ userType }: AppointmentListProps) {
 
   const fetchPatientAppointments = async (userId: string) => {
     try {
+      console.log('Fetching patient appointments for user:', userId);
+
       const { data, error } = await supabase
         .from('medical_app_appointments')
         .select(`
@@ -161,7 +152,6 @@ export function AppointmentList({ userType }: AppointmentListProps) {
             id: apt.id,
             appointment_date: apt.appointment_date,
             appointment_type: apt.appointment_type,
-            consultation_type: apt.consultation_type,
             status: apt.status,
             notes: apt.notes,
             provider: {
@@ -192,29 +182,13 @@ export function AppointmentList({ userType }: AppointmentListProps) {
       if (error) throw error;
 
       // Refresh appointments
-      await fetchAppointments();
+      await fetchUserTypeAndAppointments();
     } catch (error) {
       console.error('Error updating appointment status:', error);
       setError('Failed to update appointment status');
     } finally {
       setUpdatingStatus(null);
     }
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric' 
-    });
   };
 
   const getStatusColor = (status: string) => {
@@ -234,103 +208,127 @@ export function AppointmentList({ userType }: AppointmentListProps) {
     }
   };
 
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return {
+      date: date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      }),
+      time: date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    };
+  };
+
   const isUpcoming = (dateString: string) => {
     return new Date(dateString) > new Date();
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600">Loading appointments...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-red-600">{error}</p>
-      </div>
-    );
-  }
-
-  if (appointments.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No appointments scheduled</h3>
-        <p className="text-gray-500">You don't have any upcoming appointments.</p>
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-gray-600">Loading appointments...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {userType === 'provider' ? 'Patient' : 'Provider'}
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Date & Time
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Type
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {appointments.map(appointment => (
-              <tr key={appointment.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <User className="h-4 w-4 text-gray-400 mr-2" />
-                    <div className="font-medium text-gray-800">
-                      {userType === 'provider' ? (
-                        <>
-                          {appointment.patient?.first_name} {appointment.patient?.last_name}
-                        </>
-                      ) : (
-                        <>
-                          Dr. {appointment.provider?.first_name} {appointment.provider?.last_name}
-                        </>
-                      )}
+    <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center">
+          <Calendar className="h-6 w-6 text-blue-600 mr-2" />
+          <h2 className="text-2xl font-bold text-gray-900">
+            {userType === 'provider' ? 'Patient Appointment Requests' : 'My Appointments'}
+          </h2>
+        </div>
+        <span className="text-sm text-gray-500">
+          {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
+      )}
+
+      {appointments.length === 0 ? (
+        <div className="text-center py-8">
+          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            {userType === 'provider' ? 'No appointment requests' : 'No appointments scheduled'}
+          </h3>
+          <p className="text-gray-500">
+            {userType === 'provider' 
+              ? 'You don\'t have any pending appointment requests.' 
+              : 'You don\'t have any upcoming appointments.'
+            }
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {appointments.map((appointment) => {
+            const { date, time } = formatDateTime(appointment.appointment_date);
+            const isUpcomingAppointment = isUpcoming(appointment.appointment_date);
+            
+            return (
+              <div
+                key={appointment.id}
+                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {appointment.appointment_type}
+                      </h3>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(appointment.status)}`}>
+                        {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                      </span>
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <Clock3 className="h-4 w-4 text-gray-400 mr-2" />
-                    <div>
-                      <div className="text-gray-600">{formatTime(appointment.appointment_date)}</div>
-                      <div className="text-sm text-gray-500">{formatDate(appointment.appointment_date)}</div>
+                    
+                    <div className="flex items-center text-gray-600 mb-2">
+                      <User className="h-4 w-4 mr-2" />
+                      <span>
+                        {userType === 'provider' ? (
+                          <>
+                            {appointment.patient?.first_name} {appointment.patient?.last_name}
+                          </>
+                        ) : (
+                          <>
+                            Dr. {appointment.provider?.first_name} {appointment.provider?.last_name} - {appointment.provider?.specialization}
+                          </>
+                        )}
+                      </span>
                     </div>
+                    
+                    <div className="flex items-center text-gray-600 mb-2">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      <span>{date}</span>
+                    </div>
+                    
+                    <div className="flex items-center text-gray-600 mb-2">
+                      <Clock className="h-4 w-4 mr-2" />
+                      <span>{time}</span>
+                    </div>
+                    
+                    {appointment.notes && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-700">
+                          <strong>Notes:</strong> {appointment.notes}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                      {appointment.appointment_type}
-                    </span>
-                    <div className="text-sm text-gray-500 mt-1">{appointment.consultation_type}</div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(appointment.status)}`}>
-                    {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
+                  
+                  <div className="ml-4 flex flex-col space-y-2">
                     {/* View button for all appointments */}
                     <button className="text-blue-600 hover:text-blue-800">
                       <Eye className="h-4 w-4" />
@@ -365,7 +363,7 @@ export function AppointmentList({ userType }: AppointmentListProps) {
                     )}
                     
                     {/* Cancel button for accepted upcoming appointments (patients only) */}
-                    {userType === 'patient' && appointment.status === 'accepted' && isUpcoming(appointment.appointment_date) && (
+                    {userType === 'patient' && appointment.status === 'accepted' && isUpcomingAppointment && (
                       <button 
                         onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
                         disabled={updatingStatus === appointment.id}
@@ -380,7 +378,7 @@ export function AppointmentList({ userType }: AppointmentListProps) {
                     )}
                     
                     {/* Mark Complete button for accepted upcoming appointments (providers only) */}
-                    {userType === 'provider' && appointment.status === 'accepted' && isUpcoming(appointment.appointment_date) && (
+                    {userType === 'provider' && appointment.status === 'accepted' && isUpcomingAppointment && (
                       <button 
                         onClick={() => updateAppointmentStatus(appointment.id, 'completed')}
                         disabled={updatingStatus === appointment.id}
@@ -394,12 +392,12 @@ export function AppointmentList({ userType }: AppointmentListProps) {
                       </button>
                     )}
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
-}
+} 

@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Mail, Lock, Heart, Stethoscope } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Stethoscope } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { checkProfileCompletion } from '../../../lib/profileUtils';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -24,13 +25,44 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const { error } = await signIn(formData.email, formData.password);
+      // Get stored user data if available (for users who just signed up)
+      const storedUserData = localStorage.getItem('pendingUserData');
+      let userData = null;
+      if (storedUserData) {
+        try {
+          userData = JSON.parse(storedUserData);
+          // Remove from localStorage after retrieving
+          localStorage.removeItem('pendingUserData');
+        } catch (err) {
+          // If parsing fails, ignore and continue without user data
+        }
+      }
+
+      const { error, user: signedInUser } = await signIn(formData.email, formData.password, userData);
 
       if (error) {
         setError(error.message);
       } else {
-        // Redirect to dashboard on successful login
-        router.push('/dashboard');
+        console.log('Sign in successful, user:', signedInUser);
+        // Check profile completion using the returned user data
+        try {
+          const { isComplete } = await checkProfileCompletion(signedInUser?.id || '');
+          console.log('Profile completion check result:', isComplete);
+          
+          if (isComplete) {
+            console.log('Profile complete, redirecting to dashboard');
+            // Redirect to dashboard on successful login with complete profile
+            router.replace('/dashboard');
+          } else {
+            console.log('Profile incomplete, redirecting to profile completion');
+            // Redirect to profile completion if profile is incomplete
+            router.replace('/profile/complete');
+          }
+        } catch (err) {
+          console.error('Error checking profile completion:', err);
+          // If there's an error checking profile, redirect to profile completion
+          router.replace('/profile/complete');
+        }
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');

@@ -2,12 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Mail, Lock, User, Stethoscope, Heart, Building, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 
 export default function SignupPage() {
-  const router = useRouter();
   const { signUp } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -53,6 +51,12 @@ export default function SignupPage() {
       if (error) {
         setError(error.message);
       } else {
+        // Store user data in localStorage for later use after email verification
+        localStorage.setItem('pendingUserData', JSON.stringify({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          user_type: formData.userType
+        }));
         setIsSubmitted(true);
       }
     } catch (err) {
@@ -87,7 +91,7 @@ export default function SignupPage() {
               We've sent a verification link to <strong>{formData.email}</strong>
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              Please check your email and click the verification link to complete your registration.
+              Please check your email and click the verification link to complete your registration. After verification, you'll be prompted to complete your profile before accessing the dashboard.
             </p>
             <Link 
               href="/auth/login"
